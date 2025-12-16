@@ -219,6 +219,13 @@ def extract_email(conversation: str) -> Optional[str]:
     try:
         prompt = f"""Analyze the following conversation and extract the email address mentioned in it.
 
+CRITICAL - MOST IMPORTANT RULE: PRIORITIZE CORRECTED EMAIL ADDRESSES
+- If the user CORRECTS the email address at any point in the conversation, you MUST use the CORRECTED version, NOT the original incorrect version
+- Look for phrases like "it's actually", "it should be", "correct it to", "it's", "sorry, it's", "no, it's", "actually it's", etc. followed by a corrected email
+- The CORRECTED email address is the FINAL and ACCURATE one - always use the most recent corrected version
+- If multiple email addresses appear, use the LAST one mentioned that was confirmed or corrected by the user
+- Example: If agent says "marshall.25ec@lisa.ac.in" and user corrects to "marshal.25ec@licet.ac.in", you MUST extract "marshal.25ec@licet.ac.in" (the corrected version)
+
 CRITICAL: Email addresses may be mentioned in TWO formats:
 
 1. STANDARD FORMAT: Direct email like "user@example.com" or "john.doe@gmail.com"
@@ -241,6 +248,7 @@ EXTRACTION RULES:
 - Handle numbers and special characters correctly
 - Convert to lowercase
 - Preserve the exact structure (e.g., "25 ec" should become "25ec" not "25ec" with space)
+- **MOST CRITICAL**: If there are corrections, use the CORRECTED version, not the original
 
 EXAMPLES OF SPOKEN FORMATS TO RECOGNIZE:
 - "marshall dot 25 ec at lised dot ac dot in" → "marshall.25ec@lised.ac.in"
@@ -249,8 +257,14 @@ EXAMPLES OF SPOKEN FORMATS TO RECOGNIZE:
 - "test underscore name at domain dot org" → "test_name@domain.org" (if underscore is mentioned)
 - "email hyphen contact at site dot net" → "email-contact@site.net" (if hyphen is mentioned)
 
+EXAMPLES OF CORRECTIONS TO HANDLE:
+- Agent: "marshall.25ec@lisa.ac.in" → User: "Actually it's marshal.25ec@licet.ac.in" → Extract: "marshal.25ec@licet.ac.in"
+- Agent: "john.doe@gmail.com" → User: "It's john.smith@gmail.com" → Extract: "john.smith@gmail.com"
+- Agent: "user@example.com" → User: "Sorry, it's user@example.org" → Extract: "user@example.org"
+
 Return ONLY the email address in standard format (lowercase, with @ and . symbols).
 If no email address is found, return "NOT_FOUND".
+**ALWAYS use the CORRECTED/FINAL version if corrections were made.**
 
 Conversation:
 {conversation}
@@ -260,7 +274,7 @@ Email address:"""
         response = openai_client.chat.completions.create(
             model="gpt-4o",
             messages=[
-                {"role": "system", "content": "You are an expert email extraction assistant. You can extract email addresses from conversations in BOTH standard format (user@example.com) and spoken/read-out format (e.g., 'user dot name at example dot com'). Always convert spoken formats to standard email format. Return only the email address in lowercase standard format."},
+                {"role": "system", "content": "You are an expert email extraction assistant. You can extract email addresses from conversations in BOTH standard format (user@example.com) and spoken/read-out format (e.g., 'user dot name at example dot com'). Always convert spoken formats to standard email format. MOST CRITICAL: If the user corrects the email address at any point, you MUST use the CORRECTED version, NOT the original incorrect version. Always prioritize the most recent corrected email address. Return only the email address in lowercase standard format."},
                 {"role": "user", "content": prompt}
             ],
             temperature=0.1,
@@ -312,6 +326,13 @@ Extract the following information:
 1. Name: The person's full name
 2. Email: The person's email address
 
+CRITICAL - MOST IMPORTANT RULE: PRIORITIZE CORRECTED EMAIL ADDRESSES
+- If the user CORRECTS the email address at any point in the conversation, you MUST use the CORRECTED version, NOT the original incorrect version
+- Look for phrases like "it's actually", "it should be", "correct it to", "it's", "sorry, it's", "no, it's", "actually it's", etc. followed by a corrected email
+- The CORRECTED email address is the FINAL and ACCURATE one - always use the most recent corrected version
+- If multiple email addresses appear, use the LAST one mentioned that was confirmed or corrected by the user
+- Example: If agent says "marshall.25ec@lisa.ac.in" and user corrects to "marshal.25ec@licet.ac.in", you MUST extract "marshal.25ec@licet.ac.in" (the corrected version)
+
 IMPORTANT - EMAIL FORMAT HANDLING:
 Email addresses may be mentioned in TWO formats:
 
@@ -332,6 +353,12 @@ When extracting email addresses:
 - Remove extra spaces between words
 - Convert to lowercase
 - Preserve the exact structure (e.g., "25 ec" should become "25ec")
+- **MOST CRITICAL**: If there are corrections, use the CORRECTED version, not the original
+
+EXAMPLES OF CORRECTIONS TO HANDLE:
+- Agent: "marshall.25ec@lisa.ac.in" → User: "Actually it's marshal.25ec@licet.ac.in" → Extract: "marshal.25ec@licet.ac.in"
+- Agent: "john.doe@gmail.com" → User: "It's john.smith@gmail.com" → Extract: "john.smith@gmail.com"
+- Agent: "user@example.com" → User: "Sorry, it's user@example.org" → Extract: "user@example.org"
 
 Return the information in JSON format:
 {{
@@ -340,6 +367,7 @@ Return the information in JSON format:
 }}
 
 If any information is not found, use empty string "" for that field.
+**ALWAYS use the CORRECTED/FINAL email version if corrections were made.**
 
 Conversation:
 {conversation}
@@ -349,7 +377,7 @@ JSON:"""
         response = openai_client.chat.completions.create(
             model="gpt-4o",
             messages=[
-                {"role": "system", "content": "You are a data extraction assistant. Extract user information from conversations and return valid JSON. When extracting email addresses, handle both standard format (user@example.com) and spoken/read-out format (e.g., 'user dot name at example dot com'). Always convert spoken email formats to standard format."},
+                {"role": "system", "content": "You are a data extraction assistant. Extract user information from conversations and return valid JSON. When extracting email addresses, handle both standard format (user@example.com) and spoken/read-out format (e.g., 'user dot name at example dot com'). Always convert spoken email formats to standard format. MOST CRITICAL: If the user corrects the email address at any point, you MUST use the CORRECTED version, NOT the original incorrect version. Always prioritize the most recent corrected email address."},
                 {"role": "user", "content": prompt}
             ],
             temperature=0.1,
