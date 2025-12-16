@@ -215,11 +215,41 @@ Phone number:"""
 
 
 def extract_email(conversation: str) -> Optional[str]:
-    """Extract email address from conversation using OpenAI"""
+    """Extract email address from conversation using OpenAI - handles both standard and spoken formats"""
     try:
         prompt = f"""Analyze the following conversation and extract the email address mentioned in it.
-The email address should be in standard format (e.g., user@example.com).
-Return ONLY the email address in lowercase.
+
+CRITICAL: Email addresses may be mentioned in TWO formats:
+
+1. STANDARD FORMAT: Direct email like "user@example.com" or "john.doe@gmail.com"
+
+2. SPOKEN/READ-OUT FORMAT: Email addresses spoken aloud with words instead of symbols:
+   - "dot" or "period" or "point" instead of "."
+   - "at" or "at the rate" or "at sign" instead of "@"
+   - Examples:
+     * "marshall dot 25 ec at lised dot ac dot in" → "marshall.25ec@lised.ac.in"
+     * "john dot doe at gmail dot com" → "john.doe@gmail.com"
+     * "user at example dot com" → "user@example.com"
+     * "test period name at domain point org" → "test.name@domain.org"
+     * "email at the rate of company dot co dot uk" → "email@company.co.uk"
+
+EXTRACTION RULES:
+- Convert ALL spoken formats to standard email format (user@domain.com)
+- Replace "dot", "period", "point" with "."
+- Replace "at", "at the rate", "at sign" with "@"
+- Remove extra spaces between words
+- Handle numbers and special characters correctly
+- Convert to lowercase
+- Preserve the exact structure (e.g., "25 ec" should become "25ec" not "25ec" with space)
+
+EXAMPLES OF SPOKEN FORMATS TO RECOGNIZE:
+- "marshall dot 25 ec at lised dot ac dot in" → "marshall.25ec@lised.ac.in"
+- "john dot smith at gmail dot com" → "john.smith@gmail.com"
+- "user123 at company dot co dot uk" → "user123@company.co.uk"
+- "test underscore name at domain dot org" → "test_name@domain.org" (if underscore is mentioned)
+- "email hyphen contact at site dot net" → "email-contact@site.net" (if hyphen is mentioned)
+
+Return ONLY the email address in standard format (lowercase, with @ and . symbols).
 If no email address is found, return "NOT_FOUND".
 
 Conversation:
@@ -230,11 +260,11 @@ Email address:"""
         response = openai_client.chat.completions.create(
             model="gpt-4o",
             messages=[
-                {"role": "system", "content": "You are an email extraction assistant. Extract email addresses from conversations."},
+                {"role": "system", "content": "You are an expert email extraction assistant. You can extract email addresses from conversations in BOTH standard format (user@example.com) and spoken/read-out format (e.g., 'user dot name at example dot com'). Always convert spoken formats to standard email format. Return only the email address in lowercase standard format."},
                 {"role": "user", "content": prompt}
             ],
             temperature=0.1,
-            max_tokens=100
+            max_tokens=150
         )
         
         email = response.choices[0].message.content.strip()
@@ -243,14 +273,30 @@ Email address:"""
             logger.warning("No email address found in conversation")
             return None
         
-        # Normalize email (lowercase, trim)
-        email = email.lower().strip()
+        # Normalize email (lowercase, trim, remove quotes if present)
+        email = email.lower().strip().strip('"').strip("'")
+        
+        # Remove any leading/trailing punctuation that might have been included
+        email = email.rstrip('.,;:!?')
         
         # Basic email validation
         if "@" not in email or "." not in email.split("@")[1]:
             logger.warning(f"Invalid email format extracted: {email}")
             return None
         
+        # Additional validation: check for basic email structure
+        parts = email.split("@")
+        if len(parts) != 2 or not parts[0] or not parts[1]:
+            logger.warning(f"Invalid email structure extracted: {email}")
+            return None
+        
+        # Check that domain has at least one dot
+        domain = parts[1]
+        if "." not in domain:
+            logger.warning(f"Invalid email domain format extracted: {email}")
+            return None
+        
+        logger.info(f"Extracted email: {email}")
         return email
         
     except Exception as e:
@@ -265,6 +311,27 @@ def create_user_from_conversation(conversation: str, phone_number: Optional[str]
 Extract the following information:
 1. Name: The person's full name
 2. Email: The person's email address
+
+IMPORTANT - EMAIL FORMAT HANDLING:
+Email addresses may be mentioned in TWO formats:
+
+1. STANDARD FORMAT: Direct email like "user@example.com" or "john.doe@gmail.com"
+
+2. SPOKEN/READ-OUT FORMAT: Email addresses spoken aloud with words instead of symbols:
+   - "dot" or "period" or "point" instead of "."
+   - "at" or "at the rate" or "at sign" instead of "@"
+   - Examples:
+     * "marshall dot 25 ec at lised dot ac dot in" → "marshall.25ec@lised.ac.in"
+     * "john dot doe at gmail dot com" → "john.doe@gmail.com"
+     * "user at example dot com" → "user@example.com"
+
+When extracting email addresses:
+- Convert ALL spoken formats to standard email format (user@domain.com)
+- Replace "dot", "period", "point" with "."
+- Replace "at", "at the rate", "at sign" with "@"
+- Remove extra spaces between words
+- Convert to lowercase
+- Preserve the exact structure (e.g., "25 ec" should become "25ec")
 
 Return the information in JSON format:
 {{
@@ -282,7 +349,7 @@ JSON:"""
         response = openai_client.chat.completions.create(
             model="gpt-4o",
             messages=[
-                {"role": "system", "content": "You are a data extraction assistant. Extract user information from conversations and return valid JSON."},
+                {"role": "system", "content": "You are a data extraction assistant. Extract user information from conversations and return valid JSON. When extracting email addresses, handle both standard format (user@example.com) and spoken/read-out format (e.g., 'user dot name at example dot com'). Always convert spoken email formats to standard format."},
                 {"role": "user", "content": prompt}
             ],
             temperature=0.1,
